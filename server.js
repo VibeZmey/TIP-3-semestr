@@ -5,7 +5,10 @@ const { nanoid } = require('nanoid');
 const app = express();
 const port = 3000;
 
-let products = [];
+let products = [
+  { id: nanoid(6), name: 'Ноутбук', category: 'Электроника', description: 'Игровой', price: 75000, quantity: 5 },
+  { id: nanoid(6), name: 'Смартфон', category: 'Электроника', description: 'Android', price: 25000, quantity: 10 }
+];
 
 app.use(cors(
 {

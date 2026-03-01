@@ -4,11 +4,15 @@ import './App.css';
 
 function App() {
   const [products, setProducts] = useState([]);
+
   const [form, setForm] = useState({ name: '', category: '', description: '', price: '', quantity: '' });
   const [editing, setEditing] = useState(null);
+
   const [modalOpen, setModalOpen] = useState(false);
 
-  useEffect(() => { loadProducts(); }, []);
+  useEffect(() => {
+    loadProducts();
+  })
 
   const loadProducts = async () => {
     const data = await api.getProducts();
