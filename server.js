@@ -1,222 +1,137 @@
 const express = require('express');
-const cors = require('cors');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 const { nanoid } = require('nanoid');
-const swaggerJsdoc = require('swagger-jsdoc');
-const swaggerUi = require('swagger-ui-express');
 
 const app = express();
 const port = 3000;
+const JWT_SECRET = 'access_secret';
+const ACCESS_EXPIRES_IN = '15m';
 
-let products = [
-  { id: nanoid(6), name: 'Ноутбук', category: 'Электроника', description: 'Игровой', price: 75000, quantity: 5 },
-  { id: nanoid(6), name: 'Смартфон', category: 'Электроника', description: 'Android', price: 25000, quantity: 10 },
-];
-
-app.use(cors(
-{
-    origin: 'http://localhost:3001',
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-    allowedHeaders: ['Content-Type']
-  }));
 app.use(express.json());
 
-const swaggerOptions = {
-  definition: {
-    openapi: '3.0.0',
-    info: { title: 'API', version: '1.0.0', description: 'CRUD API' },
-    servers: [{ url: `http://localhost:${port}`, description: 'Локальный сервер' }],
-  },
-  apis: ['./server.js'],
-};
+const users = [];
+const products = [];
 
-const swaggerSpec = swaggerJsdoc(swaggerOptions);
+function authMiddleware(req, res, next) {
+  const header = req.headers.authorization || '';
+  const [scheme, token] = header.split(' ');
+  if (scheme !== 'Bearer' || !token) {
+    return res.status(401).json({ error: 'Missing or invalid Authorization header' });
+  }
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    req.user = payload;
+    next();
+  } catch (err) {
+    return res.status(401).json({ error: 'Invalid or expired token' });
+  }
+}
 
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.post('/api/auth/register', async (req, res) => {
+  const { email, first_name, last_name, password } = req.body;
+  if (!email || !password || !first_name || !last_name) {
+    return res.status(400).json({ error: 'All fields are required' });
+  }
+  const existingUser = users.find(u => u.email === email);
+  if (existingUser) {
+    return res.status(400).json({ error: 'User already exists' });
+  }
+  const hashedPassword = await bcrypt.hash(password, 10);
+  const newUser = {
+    id: nanoid(),
+    email,
+    first_name,
+    last_name,
+    password: hashedPassword
+  };
+  users.push(newUser);
+  res.status(201).json({ id: newUser.id, email: newUser.email, first_name: newUser.first_name, last_name: newUser.last_name });
+});
 
-/**
- * @swagger
- * components:
- *   schemas:
- *     Product:
- *       type: object
- *       required: [name, category, price, quantity]
- *       properties:
- *         id:
- *           type: string
- *           description: Уникальный ID товара
- *         name:
- *           type: string
- *           description: Название товара
- *         category:
- *           type: string
- *           description: Категория товара
- *         description:
- *           type: string
- *           description: Описание товара
- *         price:
- *           type: integer
- *           description: Цена в рублях
- *         quantity:
- *           type: integer
- *           description: Количество на складе
- *       example:
- *         id: "abc123"
- *         name: "Ноутбук"
- *         category: "Электроника"
- *         description: "Игровой"
- *         price: 75000
- *         quantity: 5
- */
+app.post('/api/auth/login', async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password are required' });
+  }
+  const user = users.find(u => u.email === email);
+  if (!user) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+  const isValid = await bcrypt.compare(password, user.password);
+  if (!isValid) {
+    return res.status(401).json({ error: 'Invalid credentials' });
+  }
+  const accessToken = jwt.sign(
+    { sub: user.id, email: user.email, first_name: user.first_name, last_name: user.last_name },
+    JWT_SECRET,
+    { expiresIn: ACCESS_EXPIRES_IN }
+  );
+  res.json({ accessToken });
+});
 
-/**
- * @swagger
- * /api/products:
- *   post:
- *     summary: Создает новый товар
- *     tags: [Products]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/Product'
- *     responses:
- *       201:
- *         description: Товар успешно создан
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Product'
- *       400:
- *         description: Ошибка в теле запроса
- */
+app.get('/api/auth/me', authMiddleware, (req, res) => {
+  const userId = req.user.sub;
+  const user = users.find(u => u.id === userId);
+  if (!user) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+  res.json({ id: user.id, email: user.email, first_name: user.first_name, last_name: user.last_name });
+});
+
 app.post('/api/products', (req, res) => {
-  const { name, category, description, price, quantity } = req.body;
-
-  const newProduct = { id: nanoid(6), name, category, description, price: Number(price), quantity: Number(quantity) };
+  const { title, category, description, price } = req.body;
+  if (!title || !price) {
+    return res.status(400).json({ error: 'Title and price are required' });
+  }
+  const newProduct = {
+    id: nanoid(),
+    title,
+    category: category || '',
+    description: description || '',
+    price: Number(price)
+  };
   products.push(newProduct);
   res.status(201).json(newProduct);
 });
 
-/**
- * @swagger
- * /api/products:
- *   get:
- *     summary: Возвращает список всех товаров
- *     tags: [Products]
- *     responses:
- *       200:
- *         description: Список товаров
- *         content:
- *           application/json:
- *             schema:
- *               type: array
- *               items:
- *                 $ref: '#/components/schemas/Product'
- */
-app.get('/api/products', (req, res) => res.json(products));
+app.get('/api/products', (req, res) => {
+  res.json(products);
+});
 
-/**
- * @swagger
- * /api/products/{id}:
- *   get:
- *     summary: Получает товар по ID
- *     tags: [Products]
- *     parameters:
- *       - in: path
- *         name: id
- *         schema: { type: string }
- *         required: true
- *         description: ID товара
- *     responses:
- *       200:
- *         description: Данные товара
- *         content:
- *           application/json:
- *             schema: { $ref: '#/components/schemas/Product' }
- *       404:
- *         description: Товар не найден
- */
-app.get('/api/products/:id', (req, res) => {
+app.get('/api/products/:id', authMiddleware, (req, res) => {
   const product = products.find(p => p.id === req.params.id);
-
+  if (!product) {
+    return res.status(404).json({ error: 'Product not found' });
+  }
   res.json(product);
 });
 
-/**
- * @swagger
- * /api/products/{id}:
- *   patch:
- *     summary: Обновляет данные товара
- *     tags: [Products]
- *     parameters:
- *       - in: path
- *         name: id
- *         schema: { type: string }
- *         required: true
- *         description: ID товара
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema: { $ref: '#/components/schemas/Product' }
- *     responses:
- *       200:
- *         description: Обновленный товар
- *         content:
- *           application/json:
- *             schema: { $ref: '#/components/schemas/Product' }
- *       400:
- *         description: Нет данных для обновления
- *       404:
- *         description: Товар не найден
- */
-app.patch('/api/products/:id', (req, res) => {
-  const product = products.find(p => p.id === req.params.id);
-
-  if (req.body?.name) product.name = req.body.name;
-  if (req.body?.category) product.category = req.body.category;
-  if (req.body?.description !== undefined) product.description = req.body.description;
-  if (req.body?.price !== undefined) product.price = Number(req.body.price);
-  if (req.body?.quantity !== undefined) product.quantity = Number(req.body.quantity);
-  res.json(product);
+app.put('/api/products/:id', authMiddleware, (req, res) => {
+  const productIndex = products.findIndex(p => p.id === req.params.id);
+  if (productIndex === -1) {
+    return res.status(404).json({ error: 'Product not found' });
+  }
+  const { title, category, description, price } = req.body;
+  products[productIndex] = {
+    ...products[productIndex],
+    title: title || products[productIndex].title,
+    category: category || products[productIndex].category,
+    description: description || products[productIndex].description,
+    price: price ? Number(price) : products[productIndex].price
+  };
+  res.json(products[productIndex]);
 });
 
-/**
- * @swagger
- * /api/products/{id}:
- *   delete:
- *     summary: Удаляет товар
- *     tags: [Products]
- *     parameters:
- *       - in: path
- *         name: id
- *         schema: { type: string }
- *         required: true
- *         description: ID товара
- *     responses:
- *       204:
- *         description: Товар успешно удален
- *       404:
- *         description: Товар не найден
- */
-app.delete('/api/products/:id', (req, res) => {
-  const index = products.findIndex(p => p.id === req.params.id);
-  if (index === -1) return res.status(404).json({ error: 'Product not found' });
-  products.splice(index, 1);
+app.delete('/api/products/:id', authMiddleware, (req, res) => {
+  const productIndex = products.findIndex(p => p.id === req.params.id);
+  if (productIndex === -1) {
+    return res.status(404).json({ error: 'Product not found' });
+  }
+  products.splice(productIndex, 1);
   res.status(204).send();
 });
 
-app.use((req, res) => {
-  res.status(404).json({ error: "Not found" });
-});
-
-app.use((err, req, res, next) => {
-  console.error("Unhandled error:", err);
-  res.status(500).json({ error: "Internal server error" });
-});
-
 app.listen(port, () => {
-  console.log(`Сервер запущен на http://localhost:${port}`);
-  console.log(`Swagger UI доступен по адресу http://localhost:${port}/apidocs`);
+  console.log(`Server running on http://localhost:${port}`);
 });
