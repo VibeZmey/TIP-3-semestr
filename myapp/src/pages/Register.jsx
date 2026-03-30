@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { authApi } from '../api';
+import { useAuth } from '../context/AuthContext';
 
 function Register() {
   const [formData, setFormData] = useState({
@@ -11,6 +11,7 @@ function Register() {
   });
   const [error, setError] = useState('');
   const navigate = useNavigate();
+  const { register } = useAuth();
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -20,13 +21,12 @@ function Register() {
     e.preventDefault();
     setError('');
     try {
-      await authApi.register(formData);
+      await register(formData);
       navigate('/login');
     } catch (err) {
       setError(err.response?.data?.error || 'Registration failed');
     }
   };
-
 
   return (
     <div className="container">
@@ -35,19 +35,43 @@ function Register() {
         {error && <p className="error">{error}</p>}
         <div className="form-group">
           <label>Email</label>
-          <input type="email" name="email" value={formData.email} onChange={handleChange} required />
+          <input
+            type="email"
+            name="email"
+            value={formData.email}
+            onChange={handleChange}
+            required
+          />
         </div>
         <div className="form-group">
           <label>First Name</label>
-          <input type="text" name="first_name" value={formData.first_name} onChange={handleChange} required />
+          <input
+            type="text"
+            name="first_name"
+            value={formData.first_name}
+            onChange={handleChange}
+            required
+          />
         </div>
         <div className="form-group">
           <label>Last Name</label>
-          <input type="text" name="last_name" value={formData.last_name} onChange={handleChange} required />
+          <input
+            type="text"
+            name="last_name"
+            value={formData.last_name}
+            onChange={handleChange}
+            required
+          />
         </div>
         <div className="form-group">
           <label>Password</label>
-          <input type="password" name="password" value={formData.password} onChange={handleChange} required />
+          <input
+            type="password"
+            name="password"
+            value={formData.password}
+            onChange={handleChange}
+            required
+          />
         </div>
         <button type="submit">Register</button>
       </form>

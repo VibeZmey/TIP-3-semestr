@@ -11,20 +11,41 @@ const ACCESS_SECRET = 'access_secret';
 const REFRESH_SECRET = 'refresh_secret';
 const ACCESS_EXPIRES_IN = '15m';
 const REFRESH_EXPIRES_IN = '7d';
-app.use(cors({
-  origin: 'http://localhost:3001',
-  credentials: true
-}));
+
+app.use(cors({ origin: 'http://localhost:3001', credentials: true }));
 app.use(express.json());
 
-
-const users = [];
+const users = [
+  {
+    id: nanoid(),
+    email: "user@user.ru",
+    first_name: "user",
+    last_name: "user",
+    password: "$2b$10$.9wtkel5S0n6vv/mPIHvIu.ecP4iM7hf1Of9PExOo2kcw0CuFYMzy",
+    role: "user"
+  },
+  {
+    id: nanoid(),
+    email: "admin@admin.ru",
+    first_name: "admin",
+    last_name: "admin",
+    password: "$2b$10$.9wtkel5S0n6vv/mPIHvIu.ecP4iM7hf1Of9PExOo2kcw0CuFYMzy",
+    role: "admin"
+  },
+  {
+    id: nanoid(),
+    email: "seller@seller.ru",
+    first_name: "seller",
+    last_name: "seller",
+    password: "$2b$10$.9wtkel5S0n6vv/mPIHvIu.ecP4iM7hf1Of9PExOo2kcw0CuFYMzy",
+    role: "seller"
+  }];
 const products = [];
 const refreshTokens = new Set();
 
 function generateAccessToken(user) {
   return jwt.sign(
-    { sub: user.id, email: user.email, first_name: user.first_name, last_name: user.last_name },
+    { sub: user.id, email: user.email, first_name: user.first_name, last_name: user.last_name, role: user.role },
     ACCESS_SECRET,
     { expiresIn: ACCESS_EXPIRES_IN }
   );
@@ -32,7 +53,7 @@ function generateAccessToken(user) {
 
 function generateRefreshToken(user) {
   return jwt.sign(
-    { sub: user.id, email: user.email, first_name: user.first_name, last_name: user.last_name },
+    { sub: user.id, email: user.email, first_name: user.first_name, last_name: user.last_name, role: user.role },
     REFRESH_SECRET,
     { expiresIn: REFRESH_EXPIRES_IN }
   );
@@ -53,8 +74,17 @@ function authMiddleware(req, res, next) {
   }
 }
 
+function roleMiddleware(allowedRoles) {
+  return (req, res, next) => {
+    if (!req.user || !allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    next();
+  };
+}
+
 app.post('/api/auth/register', async (req, res) => {
-  const { email, first_name, last_name, password } = req.body;
+  const { email, first_name, last_name, password, role } = req.body;
   if (!email || !password || !first_name || !last_name) {
     return res.status(400).json({ error: 'All fields are required' });
   }
@@ -68,10 +98,13 @@ app.post('/api/auth/register', async (req, res) => {
     email,
     first_name,
     last_name,
-    password: hashedPassword
+    password: hashedPassword,
+    role: role || 'user'
   };
+
+  console.log(newUser.password);
   users.push(newUser);
-  res.status(201).json({ id: newUser.id, email: newUser.email, first_name: newUser.first_name, last_name: newUser.last_name });
+  res.status(201).json({ id: newUser.id, email: newUser.email, first_name: newUser.first_name, last_name: newUser.last_name, role: newUser.role });
 });
 
 app.post('/api/auth/login', async (req, res) => {
@@ -123,10 +156,52 @@ app.get('/api/auth/me', authMiddleware, (req, res) => {
   if (!user) {
     return res.status(404).json({ error: 'User not found' });
   }
-  res.json({ id: user.id, email: user.email, first_name: user.first_name, last_name: user.last_name });
+  res.json({ id: user.id, email: user.email, first_name: user.first_name, last_name: user.last_name, role: user.role });
 });
 
-app.post('/api/products', (req, res) => {
+app.get('/api/users', authMiddleware, roleMiddleware(['admin']), (req, res) => {
+  const userList = users.map(({ id, email, first_name, last_name, role }) => ({ id, email, first_name, last_name, role }));
+  res.json(userList);
+});
+
+app.get('/api/users/:id', authMiddleware, roleMiddleware(['admin']), (req, res) => {
+  const user = users.find(u => u.id === req.params.id);
+  if (!user) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+  res.json({ id: user.id, email: user.email, first_name: user.first_name, last_name: user.last_name, role: user.role });
+});
+
+app.put('/api/users/:id', authMiddleware, roleMiddleware(['admin']), async (req, res) => {
+  const userIndex = users.findIndex(u => u.id === req.params.id);
+  if (userIndex === -1) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+  const { email, first_name, last_name, role, password } = req.body;
+  if (password) {
+    users[userIndex].password = await bcrypt.hash(password, 10);
+  }
+  users[userIndex] = {
+    ...users[userIndex],
+    email: email || users[userIndex].email,
+    first_name: first_name || users[userIndex].first_name,
+    last_name: last_name || users[userIndex].last_name,
+    role: role || users[userIndex].role
+  };
+  const { id, email: uEmail, first_name: uFirstName, last_name: uLastName, role: uRole } = users[userIndex];
+  res.json({ id, email: uEmail, first_name: uFirstName, last_name: uLastName, role: uRole });
+});
+
+app.delete('/api/users/:id', authMiddleware, roleMiddleware(['admin']), (req, res) => {
+  const userIndex = users.findIndex(u => u.id === req.params.id);
+  if (userIndex === -1) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+  users.splice(userIndex, 1);
+  res.status(204).send();
+});
+
+app.post('/api/products', authMiddleware, roleMiddleware(['seller', 'admin']), (req, res) => {
   const { title, category, description, price } = req.body;
   if (!title || !price) {
     return res.status(400).json({ error: 'Title and price are required' });
@@ -154,7 +229,7 @@ app.get('/api/products/:id', authMiddleware, (req, res) => {
   res.json(product);
 });
 
-app.put('/api/products/:id', authMiddleware, (req, res) => {
+app.put('/api/products/:id', authMiddleware, roleMiddleware(['seller', 'admin']), (req, res) => {
   const productIndex = products.findIndex(p => p.id === req.params.id);
   if (productIndex === -1) {
     return res.status(404).json({ error: 'Product not found' });
@@ -170,7 +245,7 @@ app.put('/api/products/:id', authMiddleware, (req, res) => {
   res.json(products[productIndex]);
 });
 
-app.delete('/api/products/:id', authMiddleware, (req, res) => {
+app.delete('/api/products/:id', authMiddleware, roleMiddleware(['admin']), (req, res) => {
   const productIndex = products.findIndex(p => p.id === req.params.id);
   if (productIndex === -1) {
     return res.status(404).json({ error: 'Product not found' });
