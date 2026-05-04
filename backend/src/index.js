@@ -15,7 +15,6 @@ async function initRedis() {
     if (process.env.REDIS_URL) {
       redisClient = createClient({ url: process.env.REDIS_URL });
     } else {
-      // default service name in docker-compose: redis
       redisClient = createClient({ url: 'redis://redis:6379' });
     }
     redisClient.on('error', (e) => console.error('Redis error', e));
@@ -27,7 +26,6 @@ async function initRedis() {
   }
 }
 
-// Simple cache middleware for GET list and GET by id
 function cacheMiddleware(keyFn, ttlSec = 60) {
   return async (req, res, next) => {
     if (!redisClient) return next();
@@ -37,7 +35,6 @@ function cacheMiddleware(keyFn, ttlSec = 60) {
       if (cached) {
         return res.json({ source: 'cache', data: JSON.parse(cached) });
       }
-      // attach cache key to request for later saving
       req._cacheKey = key;
       req._cacheTTL = ttlSec;
       return next();
@@ -61,7 +58,6 @@ app.get('/', (req, res) => {
   res.json({ server: SERVER_ID });
 });
 
-// Create user
 app.post('/api/users', async (req, res) => {
   const { first_name, last_name, age } = req.body;
   const now = Date.now();
@@ -70,7 +66,6 @@ app.post('/api/users', async (req, res) => {
       'INSERT INTO users (first_name, last_name, age, created_at, updated_at) VALUES ($1,$2,$3,$4,$5) RETURNING *',
       [first_name, last_name, age || null, now, now]
     );
-    // invalidate simple list cache
     if (redisClient) await redisClient.del('users:all');
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -79,7 +74,6 @@ app.post('/api/users', async (req, res) => {
   }
 });
 
-// List users (cache 1 minute)
 app.get('/api/users', cacheMiddleware(() => 'users:all', 60), async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM users ORDER BY id');
@@ -92,7 +86,6 @@ app.get('/api/users', cacheMiddleware(() => 'users:all', 60), async (req, res) =
   }
 });
 
-// Get user
 app.get('/api/users/:id', cacheMiddleware((req) => `users:${req.params.id}`, 60), async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM users WHERE id = $1', [req.params.id]);
@@ -106,7 +99,6 @@ app.get('/api/users/:id', cacheMiddleware((req) => `users:${req.params.id}`, 60)
   }
 });
 
-// Update user
 app.patch('/api/users/:id', async (req, res) => {
   const { first_name, last_name, age } = req.body;
   const now = Date.now();
@@ -127,7 +119,6 @@ app.patch('/api/users/:id', async (req, res) => {
   }
 });
 
-// Delete user (soft delete as blocked? but here we remove)
 app.delete('/api/users/:id', async (req, res) => {
   try {
     const result = await pool.query('DELETE FROM users WHERE id = $1 RETURNING *', [req.params.id]);
@@ -143,7 +134,6 @@ app.delete('/api/users/:id', async (req, res) => {
   }
 });
 
-// Start server after DB and optional Redis are ready
 async function start() {
   try {
     await init();

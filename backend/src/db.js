@@ -29,7 +29,6 @@ async function waitForDatabase() {
 
 async function init() {
   await waitForDatabase();
-  // Создадим таблицу users, если она отсутствует
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
       id SERIAL PRIMARY KEY,
