@@ -1,33 +1,38 @@
 services:
-  db:
-    image: postgres:15
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: postgres
+  server1:
+    image: node:22-alpine
+    working_dir: /app
     volumes:
-      - db_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-      start_period: 5s
-
-  app:
-    build: .
+      - ./server1:/app
     environment:
       PORT: 3000
-      DATABASE_URL: postgresql://postgres:postgres@db:5432/postgres
-      DATABASE_WAIT_RETRIES: 30
-      DATABASE_WAIT_DELAY_MS: 2000
-    depends_on:
-      db:
-        condition: service_healthy
+      SERVER_NAME: server1
+    command: ["node", "index.js"]
     ports:
-      - "3000:3000"
+      - "3001:3000"
     restart: unless-stopped
 
-volumes:
-  db_data:
+  server2:
+    image: node:22-alpine
+    working_dir: /app
+    volumes:
+      - ./server2:/app
+    environment:
+      PORT: 3001
+      SERVER_NAME: server2
+    command: ["node", "index.js"]
+    ports:
+      - "3002:3001"
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - server1
+      - server2
+    restart: unless-stopped
 
