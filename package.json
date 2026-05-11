@@ -8,6 +8,7 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
+    "mongo": "node src/server.js",
     "test": "node --test"
   },
   "engines": {
@@ -16,6 +17,7 @@
   "dependencies": {
     "express": "^4.21.2",
     "pg": "^8.13.1",
+    "mongoose": "^8.17.0",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1"
   }
