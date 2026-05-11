@@ -1,6 +1,5 @@
 const { Pool, types } = require('pg');
 
-// PostgreSQL bigint/int64 и integer переводим в числа, чтобы API возвращал нормальные JSON-числа.
 types.setTypeParser(20, value => Number(value));
 types.setTypeParser(23, value => Number(value));
 

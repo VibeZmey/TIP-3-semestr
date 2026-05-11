@@ -53,7 +53,12 @@ function buildUsersRouter(pool) {
         return res.status(400).json({ message: 'Validation failed', errors: validation.errors });
       }
 
-      const user = await createUser(pool, normalizeCreateUserPayload(req.body));
+      const timestamp = Math.floor(Date.now() / 1000);
+      const user = await createUser(pool, {
+        ...normalizeCreateUserPayload(req.body),
+        created_at: timestamp,
+        updated_at: timestamp
+      });
       return res.status(201).json(user);
     } catch (error) {
       return next(error);

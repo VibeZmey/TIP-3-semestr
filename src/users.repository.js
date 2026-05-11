@@ -1,5 +1,9 @@
 const USER_COLUMNS = 'id, first_name, last_name, age, created_at, updated_at';
 
+function getUnixTimestamp() {
+  return Math.floor(Date.now() / 1000);
+}
+
 const CREATE_USERS_TABLE_SQL = `
   CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
@@ -16,13 +20,16 @@ async function ensureUsersTable(pool) {
 }
 
 async function createUser(pool, user) {
+  const createdAt = Number.isInteger(user.created_at) ? user.created_at : getUnixTimestamp();
+  const updatedAt = Number.isInteger(user.updated_at) ? user.updated_at : createdAt;
+
   const result = await pool.query(
     `
-      INSERT INTO users (first_name, last_name, age)
-      VALUES ($1, $2, $3)
+      INSERT INTO users (first_name, last_name, age, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5)
       RETURNING ${USER_COLUMNS}
     `,
-    [user.first_name, user.last_name, user.age]
+    [user.first_name, user.last_name, user.age, createdAt, updatedAt]
   );
 
   return result.rows[0];
